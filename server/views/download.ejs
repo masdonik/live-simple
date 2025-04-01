@@ -1,0 +1,293 @@
+<div class="min-h-screen bg-dark-900">
+    <!-- Header Banner -->
+    <div class="bg-gradient-to-r from-green-600 to-green-800 p-6 mb-8">
+        <h1 class="text-3xl font-bold text-white text-center">Download Video Manager</h1>
+        <p class="text-center text-green-100 mt-2">Download dan kelola video Anda dengan mudah</p>
+    </div>
+
+    <div class="container mx-auto px-4">
+        <div class="bg-dark-800 rounded-lg p-6">
+            <!-- Download Form -->
+            <form id="downloadForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">URL Google Drive</label>
+                    <input type="text" name="driveUrl" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-green-500" placeholder="Masukkan URL video Google Drive...">
+                </div>
+
+                <!-- Progress Bar (Hidden by default) -->
+                <div id="downloadProgress" class="hidden">
+                    <div class="mt-4">
+                        <div class="flex justify-between text-sm mb-1">
+                            <span id="downloadStatus">Memulai download...</span>
+                            <span id="downloadPercent">0%</span>
+                        </div>
+                        <div class="w-full bg-dark-700 rounded-full h-4 overflow-hidden">
+                            <div id="progressBar" class="bg-green-600 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <div class="flex justify-between text-sm mt-1">
+                            <span id="downloadedSize">0 MB</span>
+                            <span id="totalSize">0 MB</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" id="downloadButton" class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition duration-200">
+                    Download Video
+                </button>
+            </form>
+
+            <!-- Downloaded Videos Table -->
+            <div class="mt-8">
+                <h3 class="text-xl font-semibold mb-4">Video Tersedia</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-dark-700">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Nama File</th>
+                                <th class="px-4 py-2 text-left">Ukuran</th>
+                                <th class="px-4 py-2 text-left">Tanggal</th>
+                                <th class="px-4 py-2 text-left">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="downloadedVideosTable">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rename Modal -->
+<div id="renameModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+    <div class="bg-dark-800 p-6 rounded-lg w-full max-w-md">
+        <h3 class="text-xl font-bold mb-4">Ubah Nama Video</h3>
+        <form id="renameForm" class="space-y-4">
+            <input type="hidden" id="oldFilename">
+            <div>
+                <label class="block text-sm font-medium mb-2">Nama Baru</label>
+                <input type="text" id="newFilename" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2">
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button type="button" onclick="closeRenameModal()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md">
+                    Batal
+                </button>
+                <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md">
+                    Simpan
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Format file size
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Update downloaded videos table
+async function updateDownloadedVideos() {
+    try {
+        const response = await fetch('/download');
+        const videos = await response.json();
+        
+        const tbody = document.getElementById('downloadedVideosTable');
+        tbody.innerHTML = '';
+        
+        videos.forEach(video => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="px-4 py-2 border-t border-dark-700">${video.filename}</td>
+                <td class="px-4 py-2 border-t border-dark-700">${formatFileSize(video.size)}</td>
+                <td class="px-4 py-2 border-t border-dark-700">${moment(video.modifiedDate).format('DD/MM/YYYY HH:mm')}</td>
+                <td class="px-4 py-2 border-t border-dark-700">
+                    <button onclick="showRenameModal('${video.filename}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md text-sm mr-2">
+                        Rename
+                    </button>
+                    <button onclick="deleteVideo('${video.filename}')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm">
+                        Delete
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('Error updating downloaded videos:', error);
+    }
+}
+
+let currentDownloadId = null;
+let progressInterval = null;
+
+// Handle download form submit
+document.getElementById('downloadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const downloadButton = document.getElementById('downloadButton');
+    const progressDiv = document.getElementById('downloadProgress');
+    
+    try {
+        downloadButton.disabled = true;
+        downloadButton.textContent = 'Memulai Download...';
+        progressDiv.classList.remove('hidden');
+        
+        const response = await fetch('/download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        
+        const result = await response.json();
+        if (response.ok) {
+            currentDownloadId = result.downloadId;
+            startProgressPolling();
+        } else {
+            alert(result.error || 'Gagal mengunduh video');
+            resetDownloadForm();
+        }
+    } catch (error) {
+        console.error('Error downloading video:', error);
+        alert('Terjadi kesalahan saat mengunduh video');
+        resetDownloadForm();
+    }
+});
+
+function startProgressPolling() {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+    }
+    
+    progressInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`/download/progress/${currentDownloadId}`);
+            const progress = await response.json();
+            
+            if (response.ok) {
+                updateProgressBar(progress);
+                
+                if (progress.progress === 100) {
+                    completeDownload();
+                }
+            }
+        } catch (error) {
+            console.error('Error polling progress:', error);
+        }
+    }, 1000);
+}
+
+function updateProgressBar(progress) {
+    const progressBar = document.getElementById('progressBar');
+    const percentText = document.getElementById('downloadPercent');
+    const downloadedSize = document.getElementById('downloadedSize');
+    const totalSize = document.getElementById('totalSize');
+    const status = document.getElementById('downloadStatus');
+    
+    progressBar.style.width = `${progress.progress}%`;
+    percentText.textContent = `${progress.progress}%`;
+    downloadedSize.textContent = formatFileSize(progress.downloaded);
+    totalSize.textContent = formatFileSize(progress.total);
+    status.textContent = 'Mengunduh...';
+}
+
+function completeDownload() {
+    clearInterval(progressInterval);
+    progressInterval = null;
+    currentDownloadId = null;
+    
+    document.getElementById('downloadStatus').textContent = 'Download Selesai!';
+    document.getElementById('downloadButton').textContent = 'Download Video';
+    document.getElementById('downloadButton').disabled = false;
+    
+    setTimeout(() => {
+        document.getElementById('downloadProgress').classList.add('hidden');
+        document.getElementById('downloadForm').reset();
+    }, 3000);
+    
+    updateDownloadedVideos();
+}
+
+function resetDownloadForm() {
+    const downloadButton = document.getElementById('downloadButton');
+    const progressDiv = document.getElementById('downloadProgress');
+    
+    downloadButton.disabled = false;
+    downloadButton.textContent = 'Download Video';
+    progressDiv.classList.add('hidden');
+    clearInterval(progressInterval);
+    progressInterval = null;
+    currentDownloadId = null;
+}
+
+// Rename modal functions
+function showRenameModal(filename) {
+    document.getElementById('oldFilename').value = filename;
+    document.getElementById('newFilename').value = filename;
+    document.getElementById('renameModal').classList.remove('hidden');
+}
+
+function closeRenameModal() {
+    document.getElementById('renameModal').classList.add('hidden');
+}
+
+// Handle rename form submit
+document.getElementById('renameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const oldFilename = document.getElementById('oldFilename').value;
+    const newFilename = document.getElementById('newFilename').value;
+    
+    try {
+        const response = await fetch(`/download/${oldFilename}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ newFilename })
+        });
+        
+        if (response.ok) {
+            closeRenameModal();
+            updateDownloadedVideos();
+        } else {
+            const result = await response.json();
+            alert(result.error || 'Gagal mengubah nama video');
+        }
+    } catch (error) {
+        console.error('Error renaming video:', error);
+        alert('Terjadi kesalahan saat mengubah nama video');
+    }
+});
+
+// Delete video
+async function deleteVideo(filename) {
+    if (!confirm(`Apakah Anda yakin ingin menghapus video "${filename}"?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/download/${filename}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            updateDownloadedVideos();
+        } else {
+            const result = await response.json();
+            alert(result.error || 'Gagal menghapus video');
+        }
+    } catch (error) {
+        console.error('Error deleting video:', error);
+        alert('Terjadi kesalahan saat menghapus video');
+    }
+}
+
+// Initial update
+updateDownloadedVideos();
+</script>

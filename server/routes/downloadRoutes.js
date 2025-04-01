@@ -12,6 +12,36 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /download/progress/:downloadId - Mendapatkan progress download
+router.get('/progress/:downloadId', (req, res) => {
+  try {
+    const { downloadId } = req.params;
+    const progress = googleDriveService.getDownloadProgress(downloadId);
+    
+    if (!progress) {
+      return res.status(404).json({ 
+        error: 'Download tidak ditemukan' 
+      });
+    }
+
+    // Hitung persentase
+    const percentage = progress.total > 0 
+      ? Math.floor((progress.downloaded / progress.total) * 100) 
+      : 0;
+
+    res.json({
+      downloadId,
+      status: progress.status,
+      progress: percentage,
+      downloaded: progress.downloaded,
+      total: progress.total,
+      error: progress.error
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST /download - Download video baru dari Google Drive
 router.post('/', async (req, res) => {
   try {
@@ -25,10 +55,15 @@ router.post('/', async (req, res) => {
 
     const downloadInfo = await googleDriveService.downloadVideo(driveUrl);
     res.json({
-      message: 'Video berhasil diunduh',
-      video: downloadInfo
+      message: 'Video sedang diunduh',
+      downloadId: downloadInfo.downloadId,
+      video: {
+        filename: downloadInfo.filename,
+        size: downloadInfo.size
+      }
     });
   } catch (error) {
+    console.error('Download error:', error);
     res.status(500).json({ error: error.message });
   }
 });

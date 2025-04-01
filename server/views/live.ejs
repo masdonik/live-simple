@@ -1,0 +1,172 @@
+<div class="min-h-screen bg-dark-900">
+    <!-- Header Banner -->
+    <div class="bg-gradient-to-r from-blue-600 to-blue-800 p-6 mb-8">
+        <h1 class="text-3xl font-bold text-white text-center">Live Streaming Manager</h1>
+        <p class="text-center text-blue-100 mt-2">Kelola streaming video Anda dengan mudah</p>
+    </div>
+
+    <div class="container mx-auto px-4">
+        <div class="bg-dark-800 rounded-lg p-6">
+            <!-- Streaming Form -->
+            <form id="streamingForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Platform</label>
+                    <select name="platform" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500">
+                        <option value="facebook">Facebook</option>
+                        <option value="youtube">YouTube</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2">Video</label>
+                    <select name="videoPath" id="videoSelect" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500">
+                        <option value="">Pilih Video...</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2">Stream Key</label>
+                    <input type="text" name="streamKey" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500" placeholder="Masukkan stream key...">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-2">Durasi (detik, opsional)</label>
+                    <input type="number" name="duration" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500" placeholder="Kosongkan untuk streaming tanpa batas">
+                </div>
+
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-200">
+                    Mulai Streaming
+                </button>
+            </form>
+
+            <!-- Active Streams Table -->
+            <div class="mt-8">
+                <h3 class="text-xl font-semibold mb-4">Streaming Aktif</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-dark-700">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Video</th>
+                                <th class="px-4 py-2 text-left">Platform</th>
+                                <th class="px-4 py-2 text-left">Waktu Mulai</th>
+                                <th class="px-4 py-2 text-left">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activeStreamsTable">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Update video select options
+async function updateVideoList() {
+    try {
+        const response = await fetch('/streaming');
+        const data = await response.json();
+        
+        const videoSelect = document.getElementById('videoSelect');
+        videoSelect.innerHTML = '<option value="">Pilih Video...</option>';
+        
+        if (data.videos && Array.isArray(data.videos)) {
+            data.videos.forEach(video => {
+                const option = document.createElement('option');
+                option.value = video;
+                option.textContent = video;
+                videoSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error updating video list:', error);
+    }
+}
+
+// Update active streams table
+async function updateActiveStreams() {
+    try {
+        const response = await fetch('/streaming/active');
+        const streams = await response.json();
+        
+        const tbody = document.getElementById('activeStreamsTable');
+        tbody.innerHTML = '';
+        
+        streams.forEach(stream => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="px-4 py-2 border-t border-dark-700">${stream.videoPath}</td>
+                <td class="px-4 py-2 border-t border-dark-700">${stream.platform}</td>
+                <td class="px-4 py-2 border-t border-dark-700">${moment(stream.startTime).format('HH:mm:ss')}</td>
+                <td class="px-4 py-2 border-t border-dark-700">
+                    <button onclick="stopStream('${stream.id}')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm">
+                        Stop
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('Error updating active streams:', error);
+    }
+}
+
+// Handle streaming form submit
+document.getElementById('streamingForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    
+    try {
+        const response = await fetch('/streaming/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        
+        const result = await response.json();
+        if (response.ok) {
+            alert('Streaming dimulai');
+            updateActiveStreams();
+        } else {
+            alert(result.error || 'Gagal memulai streaming');
+        }
+    } catch (error) {
+        console.error('Error starting stream:', error);
+        alert('Terjadi kesalahan saat memulai streaming');
+    }
+});
+
+// Stop streaming
+async function stopStream(streamId) {
+    try {
+        const response = await fetch('/streaming/stop', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ streamId })
+        });
+        
+        if (response.ok) {
+            updateActiveStreams();
+        } else {
+            const result = await response.json();
+            alert(result.error || 'Gagal menghentikan streaming');
+        }
+    } catch (error) {
+        console.error('Error stopping stream:', error);
+        alert('Terjadi kesalahan saat menghentikan streaming');
+    }
+}
+
+// Initial updates
+updateVideoList();
+updateActiveStreams();
+
+// Set up periodic updates
+setInterval(updateActiveStreams, 5000);
+</script>

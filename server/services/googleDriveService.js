@@ -3,10 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 const pipeline = promisify(require('stream').pipeline);
+const cheerio = require('cheerio');
 
 class GoogleDriveService {
   constructor() {
     this.videosDir = path.join(__dirname, '../../videos');
+    this.downloadProgress = {};
+    
     // Pastikan direktori videos ada
     if (!fs.existsSync(this.videosDir)) {
       fs.mkdirSync(this.videosDir, { recursive: true });
@@ -21,30 +24,92 @@ class GoogleDriveService {
         throw new Error('URL Google Drive tidak valid');
       }
 
-      // Get direct download link
-      const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+      // Generate unique download ID
+      const downloadId = `download_${Date.now()}`;
+      this.downloadProgress[downloadId] = {
+        downloaded: 0,
+        total: 0,
+        status: 'starting'
+      };
 
       // Get file metadata first
-      const response = await axios.get(downloadUrl, { 
-        responseType: 'stream',
-        maxBodyLength: Infinity,
-        maxContentLength: Infinity
+      const metadataUrl = `https://drive.google.com/file/d/${fileId}/view`;
+      const metadataResponse = await axios.get(metadataUrl);
+      const $ = cheerio.load(metadataResponse.data);
+      const title = $('title').text().replace(' - Google Drive', '').trim();
+      const filename = title || `video-${fileId}.mp4`;
+
+      // Get direct download link with confirmation token
+      const downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+      const response = await axios.get(downloadUrl, {
+        maxRedirects: 5,
+        validateStatus: status => status < 400
       });
 
-      // Get filename from content-disposition header or use fileId
-      const filename = this._getFilenameFromResponse(response) || `video-${fileId}.mp4`;
+      let finalUrl = downloadUrl;
+      
+      // Check if we need to handle the confirmation page for large files
+      if (response.data.includes('Google Drive - Virus scan warning')) {
+        const $ = cheerio.load(response.data);
+        const confirmToken = $('form').find('input[name="confirm"]').val();
+        if (confirmToken) {
+          finalUrl = `${downloadUrl}&confirm=${confirmToken}`;
+        }
+      }
+
+      // Start the actual download with progress tracking
+      const downloadResponse = await axios({
+        method: 'get',
+        url: finalUrl,
+        responseType: 'stream',
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+      });
+
+      // Get total size
+      const totalSize = parseInt(downloadResponse.headers['content-length'], 10);
       const filepath = path.join(this.videosDir, filename);
 
-      // Download file
-      await pipeline(
-        response.data,
-        fs.createWriteStream(filepath)
-      );
+      // Update progress store with total size
+      this.downloadProgress[downloadId].total = totalSize;
+      this.downloadProgress[downloadId].status = 'downloading';
 
-      // Get file stats
+      // Create write stream
+      const writer = fs.createWriteStream(filepath);
+
+      // Set up progress tracking
+      downloadResponse.data.on('data', (chunk) => {
+        this.downloadProgress[downloadId].downloaded += chunk.length;
+      });
+
+      // Handle download completion
+      downloadResponse.data.on('end', () => {
+        this.downloadProgress[downloadId].status = 'completed';
+      });
+
+      // Handle errors
+      downloadResponse.data.on('error', (err) => {
+        this.downloadProgress[downloadId].status = 'error';
+        this.downloadProgress[downloadId].error = err.message;
+        console.error('Download error:', err);
+      });
+
+      // Start download
+      await pipeline(downloadResponse.data, writer);
+
+      // Get final file stats
       const stats = await fs.promises.stat(filepath);
 
+      // Clean up progress data after a delay
+      setTimeout(() => {
+        delete this.downloadProgress[downloadId];
+      }, 300000); // Remove after 5 minutes
+
       return {
+        downloadId,
         filename,
         size: stats.size,
         path: filepath,
@@ -52,8 +117,16 @@ class GoogleDriveService {
       };
     } catch (error) {
       console.error('Error downloading video:', error);
+      if (error.response) {
+        console.error('Response status:', error.response.status);
+        console.error('Response headers:', error.response.headers);
+      }
       throw new Error(`Gagal mengunduh video: ${error.message}`);
     }
+  }
+
+  getDownloadProgress(downloadId) {
+    return this.downloadProgress[downloadId] || null;
   }
 
   async renameVideo(oldFilename, newFilename) {
@@ -117,12 +190,14 @@ class GoogleDriveService {
       const videoFiles = [];
 
       for (const file of files) {
-        const stats = await fs.promises.stat(path.join(this.videosDir, file));
-        videoFiles.push({
-          filename: file,
-          size: stats.size,
-          modifiedDate: stats.mtime
-        });
+        if (file !== '.gitkeep') {
+          const stats = await fs.promises.stat(path.join(this.videosDir, file));
+          videoFiles.push({
+            filename: file,
+            size: stats.size,
+            modifiedDate: stats.mtime
+          });
+        }
       }
 
       return videoFiles;
@@ -146,17 +221,6 @@ class GoogleDriveService {
       }
     }
 
-    return null;
-  }
-
-  _getFilenameFromResponse(response) {
-    const disposition = response.headers['content-disposition'];
-    if (disposition) {
-      const filenameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-      if (filenameMatch && filenameMatch[1]) {
-        return filenameMatch[1].replace(/['"]/g, '');
-      }
-    }
     return null;
   }
 }

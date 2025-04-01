@@ -2,34 +2,45 @@ const si = require('systeminformation');
 
 async function getStats() {
   try {
-    // Get CPU usage
-    const cpu = await si.currentLoad();
-    
-    // Get memory usage
-    const mem = await si.mem();
-    const memUsed = Math.floor((mem.used / mem.total) * 100);
-    
-    // Get disk usage
-    const disk = await si.fsSize();
-    const mainDisk = disk[0]; // Mengambil disk utama
-    const diskUsed = Math.floor((mainDisk.used / mainDisk.size) * 100);
+    const [cpu, mem, disk] = await Promise.all([
+      si.cpu(),
+      si.mem(),
+      si.fsSize()
+    ]);
 
     return {
-      cpu: Math.floor(cpu.currentLoad),
-      memory: memUsed,
-      disk: diskUsed,
-      timestamp: new Date()
+      cpu: {
+        model: cpu.manufacturer + ' ' + cpu.brand,
+        cores: cpu.cores,
+        speed: cpu.speed + ' GHz'
+      },
+      memory: {
+        total: formatBytes(mem.total),
+        used: formatBytes(mem.used),
+        free: formatBytes(mem.free)
+      },
+      disk: disk.map(d => ({
+        fs: d.fs,
+        size: formatBytes(d.size),
+        used: formatBytes(d.used),
+        available: formatBytes(d.available),
+        use: Math.round(d.use) + '%'
+      }))
     };
   } catch (error) {
-    console.error('Error getting system stats:', error);
+    console.error('Error getting system info:', error);
     return {
-      cpu: 0,
-      memory: 0,
-      disk: 0,
-      timestamp: new Date(),
-      error: error.message
+      error: 'Gagal mendapatkan informasi sistem'
     };
   }
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 module.exports = {

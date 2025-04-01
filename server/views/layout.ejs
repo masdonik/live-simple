@@ -3,107 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= typeof title !== 'undefined' ? title : 'Live Streaming Manager' %></title>
-    
-    <!-- Tailwind CSS -->
+    <title><%= title %> - Live Simple</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Font Awesome & Moment.js -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
-    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
                     colors: {
-                        dark: {
-                            50: '#f9fafb',
-                            100: '#f3f4f6',
-                            200: '#e5e7eb',
-                            300: '#d1d5db',
-                            400: '#9ca3af',
-                            500: '#6b7280',
-                            600: '#4b5563',
-                            700: '#374151',
-                            800: '#1f2937',
-                            900: '#111827',
-                        },
-                    },
-                },
-            },
+                        'dark-900': '#121212',
+                        'dark-800': '#1E1E1E',
+                        'dark-700': '#2D2D2D',
+                        'dark-600': '#3D3D3D'
+                    }
+                }
+            }
         }
     </script>
-
     <style>
-        /* Custom styles */
-        .system-stats {
-            background: rgba(31, 41, 55, 0.8);
-            backdrop-filter: blur(5px);
-        }
         body {
-            background-color: #111827;
-            color: #f3f4f6;
+            background-color: #121212;
+            color: #FFFFFF;
         }
     </style>
 </head>
-<body class="min-h-screen font-sans">
-    <!-- Header dengan System Stats -->
-    <header class="fixed top-0 w-full z-50">
-        <div class="system-stats p-4 text-sm">
-            <div class="container mx-auto flex flex-wrap justify-between items-center">
-                <h1 class="text-xl font-bold mb-2 md:mb-0">Live Streaming Manager</h1>
-                <div class="flex flex-wrap gap-4">
-                    <div class="flex items-center">
-                        <i class="fas fa-microchip mr-2"></i>
-                        <span>CPU: <span id="cpuUsage">0</span>%</span>
-                    </div>
-                    <div class="flex items-center">
-                        <i class="fas fa-memory mr-2"></i>
-                        <span>RAM: <span id="memoryUsage">0</span>%</span>
-                    </div>
-                    <div class="flex items-center">
-                        <i class="fas fa-hdd mr-2"></i>
-                        <span>Disk: <span id="diskUsage">0</span>%</span>
-                    </div>
+<body>
+    <!-- Navigation -->
+    <nav class="bg-dark-800 border-b border-dark-600">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <a href="/" class="text-xl font-bold flex items-center">
+                    <i class="fas fa-broadcast-tower text-blue-500 mr-2"></i>
+                    Live Simple
+                </a>
+                <div class="flex space-x-4">
+                    <a href="/live" class="<%= title === 'Live Streaming' ? 'bg-blue-600' : 'hover:bg-dark-700' %> text-white px-4 py-2 rounded-md transition duration-200">
+                        <i class="fas fa-video mr-2"></i>Live Streaming
+                    </a>
+                    <a href="/download-video" class="<%= title === 'Download Video' ? 'bg-green-600' : 'hover:bg-dark-700' %> text-white px-4 py-2 rounded-md transition duration-200">
+                        <i class="fas fa-download mr-2"></i>Download Video
+                    </a>
                 </div>
             </div>
         </div>
-    </header>
+    </nav>
+
+    <!-- System Info -->
+    <div class="bg-dark-800 border-b border-dark-600 py-2">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between text-sm text-gray-300">
+                <div class="flex space-x-6">
+                    <span><i class="fas fa-microchip mr-2"></i><%= stats.cpu.model %> (<%= stats.cpu.cores %> cores, <%= stats.cpu.speed %>)</span>
+                    <span><i class="fas fa-memory mr-2"></i><%= stats.memory.used %> / <%= stats.memory.total %></span>
+                </div>
+                <div class="flex space-x-6">
+                    <% stats.disk.forEach(function(disk) { %>
+                        <span><i class="fas fa-hdd mr-2"></i><%= disk.fs %>: <%= disk.used %> / <%= disk.size %> (<%= disk.use %>)</span>
+                    <% }); %>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Main Content -->
-    <main class="container mx-auto pt-24 px-4 pb-8">
-        <%- body %>
-    </main>
+    <%- body %>
 
     <!-- Footer -->
-    <footer class="bg-dark-800 text-center py-4 text-sm text-gray-400">
-        <p>&copy; <%= new Date().getFullYear() %> Live Streaming Manager. All rights reserved.</p>
+    <footer class="bg-dark-800 border-t border-dark-600 py-4 mt-8">
+        <div class="container mx-auto px-4">
+            <p class="text-center text-gray-400">&copy; 2024 Live Simple. All rights reserved.</p>
+        </div>
     </footer>
-
-    <!-- Scripts -->
-    <script>
-        // Update system stats every 5 seconds
-        function updateSystemStats() {
-            fetch('/api/system-stats')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('cpuUsage').textContent = data.cpu;
-                    document.getElementById('memoryUsage').textContent = data.memory;
-                    document.getElementById('diskUsage').textContent = data.disk;
-                })
-                .catch(error => console.error('Error fetching system stats:', error));
-        }
-
-        // Initial update and set interval
-        updateSystemStats();
-        setInterval(updateSystemStats, 5000);
-    </script>
 </body>
 </html>
