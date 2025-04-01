@@ -1,0 +1,361 @@
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Live Streaming Section -->
+    <div class="bg-dark-800 rounded-lg p-6">
+        <h2 class="text-2xl font-bold mb-6">Live Streaming</h2>
+        
+        <!-- Streaming Form -->
+        <form id="streamingForm" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium mb-2">Platform</label>
+                <select name="platform" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500">
+                    <option value="facebook">Facebook</option>
+                    <option value="youtube">YouTube</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2">Video</label>
+                <select name="videoPath" id="videoSelect" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500">
+                    <option value="">Pilih Video...</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2">Stream Key</label>
+                <input type="text" name="streamKey" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500" placeholder="Masukkan stream key...">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2">Durasi (detik, opsional)</label>
+                <input type="number" name="duration" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500" placeholder="Kosongkan untuk streaming tanpa batas">
+            </div>
+
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-200">
+                Mulai Streaming
+            </button>
+        </form>
+
+        <!-- Active Streams Table -->
+        <div class="mt-8">
+            <h3 class="text-xl font-semibold mb-4">Streaming Aktif</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-dark-700">
+                        <tr>
+                            <th class="px-4 py-2 text-left">Video</th>
+                            <th class="px-4 py-2 text-left">Platform</th>
+                            <th class="px-4 py-2 text-left">Waktu Mulai</th>
+                            <th class="px-4 py-2 text-left">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activeStreamsTable">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Download Video Section -->
+    <div class="bg-dark-800 rounded-lg p-6">
+        <h2 class="text-2xl font-bold mb-6">Download Video</h2>
+        
+        <!-- Download Form -->
+        <form id="downloadForm" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium mb-2">URL Google Drive</label>
+                <input type="text" name="driveUrl" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500" placeholder="Masukkan URL video Google Drive...">
+            </div>
+
+            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md transition duration-200">
+                Download Video
+            </button>
+        </form>
+
+        <!-- Downloaded Videos Table -->
+        <div class="mt-8">
+            <h3 class="text-xl font-semibold mb-4">Video Tersedia</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-dark-700">
+                        <tr>
+                            <th class="px-4 py-2 text-left">Nama File</th>
+                            <th class="px-4 py-2 text-left">Ukuran</th>
+                            <th class="px-4 py-2 text-left">Tanggal</th>
+                            <th class="px-4 py-2 text-left">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="downloadedVideosTable">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rename Modal -->
+<div id="renameModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+    <div class="bg-dark-800 p-6 rounded-lg w-full max-w-md">
+        <h3 class="text-xl font-bold mb-4">Ubah Nama Video</h3>
+        <form id="renameForm" class="space-y-4">
+            <input type="hidden" id="oldFilename">
+            <div>
+                <label class="block text-sm font-medium mb-2">Nama Baru</label>
+                <input type="text" id="newFilename" class="w-full bg-dark-700 border border-dark-600 rounded-md p-2">
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button type="button" onclick="closeRenameModal()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md">
+                    Batal
+                </button>
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                    Simpan
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Format file size
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Update video select options
+async function updateVideoList() {
+    try {
+        const response = await fetch('/streaming');
+        const data = await response.json();
+        console.log('Video data:', data); // Debug log
+        
+        const videoSelect = document.getElementById('videoSelect');
+        videoSelect.innerHTML = '<option value="">Pilih Video...</option>';
+        
+        if (data.videos && Array.isArray(data.videos)) {
+            data.videos.forEach(video => {
+                const option = document.createElement('option');
+                option.value = video;
+                option.textContent = video;
+                videoSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error updating video list:', error);
+    }
+}
+
+// Update active streams table
+async function updateActiveStreams() {
+    try {
+        const response = await fetch('/streaming/active');
+        const streams = await response.json();
+        
+        const tbody = document.getElementById('activeStreamsTable');
+        tbody.innerHTML = '';
+        
+        streams.forEach(stream => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="px-4 py-2 border-t border-dark-700">${stream.videoPath}</td>
+                <td class="px-4 py-2 border-t border-dark-700">${stream.platform}</td>
+                <td class="px-4 py-2 border-t border-dark-700">${moment(stream.startTime).format('HH:mm:ss')}</td>
+                <td class="px-4 py-2 border-t border-dark-700">
+                    <button onclick="stopStream('${stream.id}')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm">
+                        Stop
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('Error updating active streams:', error);
+    }
+}
+
+// Update downloaded videos table
+async function updateDownloadedVideos() {
+    try {
+        const response = await fetch('/download');
+        const videos = await response.json();
+        
+        const tbody = document.getElementById('downloadedVideosTable');
+        tbody.innerHTML = '';
+        
+        videos.forEach(video => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="px-4 py-2 border-t border-dark-700">${video.filename}</td>
+                <td class="px-4 py-2 border-t border-dark-700">${formatFileSize(video.size)}</td>
+                <td class="px-4 py-2 border-t border-dark-700">${moment(video.modifiedDate).format('DD/MM/YYYY HH:mm')}</td>
+                <td class="px-4 py-2 border-t border-dark-700">
+                    <button onclick="showRenameModal('${video.filename}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md text-sm mr-2">
+                        Rename
+                    </button>
+                    <button onclick="deleteVideo('${video.filename}')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-md text-sm">
+                        Delete
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('Error updating downloaded videos:', error);
+    }
+}
+
+// Handle streaming form submit
+document.getElementById('streamingForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    
+    try {
+        const response = await fetch('/streaming/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        
+        const result = await response.json();
+        if (response.ok) {
+            alert('Streaming dimulai');
+            updateActiveStreams();
+        } else {
+            alert(result.error || 'Gagal memulai streaming');
+        }
+    } catch (error) {
+        console.error('Error starting stream:', error);
+        alert('Terjadi kesalahan saat memulai streaming');
+    }
+});
+
+// Handle download form submit
+document.getElementById('downloadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    
+    try {
+        const response = await fetch('/download', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        
+        const result = await response.json();
+        if (response.ok) {
+            alert('Video berhasil diunduh');
+            updateVideoList();
+            updateDownloadedVideos();
+            e.target.reset();
+        } else {
+            alert(result.error || 'Gagal mengunduh video');
+        }
+    } catch (error) {
+        console.error('Error downloading video:', error);
+        alert('Terjadi kesalahan saat mengunduh video');
+    }
+});
+
+// Stop streaming
+async function stopStream(streamId) {
+    try {
+        const response = await fetch('/streaming/stop', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ streamId })
+        });
+        
+        if (response.ok) {
+            updateActiveStreams();
+        } else {
+            const result = await response.json();
+            alert(result.error || 'Gagal menghentikan streaming');
+        }
+    } catch (error) {
+        console.error('Error stopping stream:', error);
+        alert('Terjadi kesalahan saat menghentikan streaming');
+    }
+}
+
+// Rename modal functions
+function showRenameModal(filename) {
+    document.getElementById('oldFilename').value = filename;
+    document.getElementById('newFilename').value = filename;
+    document.getElementById('renameModal').classList.remove('hidden');
+}
+
+function closeRenameModal() {
+    document.getElementById('renameModal').classList.add('hidden');
+}
+
+// Handle rename form submit
+document.getElementById('renameForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const oldFilename = document.getElementById('oldFilename').value;
+    const newFilename = document.getElementById('newFilename').value;
+    
+    try {
+        const response = await fetch(`/download/${oldFilename}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ newFilename })
+        });
+        
+        if (response.ok) {
+            closeRenameModal();
+            updateVideoList();
+            updateDownloadedVideos();
+        } else {
+            const result = await response.json();
+            alert(result.error || 'Gagal mengubah nama video');
+        }
+    } catch (error) {
+        console.error('Error renaming video:', error);
+        alert('Terjadi kesalahan saat mengubah nama video');
+    }
+});
+
+// Delete video
+async function deleteVideo(filename) {
+    if (!confirm(`Apakah Anda yakin ingin menghapus video "${filename}"?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/download/${filename}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            updateVideoList();
+            updateDownloadedVideos();
+        } else {
+            const result = await response.json();
+            alert(result.error || 'Gagal menghapus video');
+        }
+    } catch (error) {
+        console.error('Error deleting video:', error);
+        alert('Terjadi kesalahan saat menghapus video');
+    }
+}
+
+// Initial updates
+updateVideoList();
+updateActiveStreams();
+updateDownloadedVideos();
+
+// Set up periodic updates
+setInterval(updateActiveStreams, 5000);
+</script>
