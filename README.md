@@ -35,7 +35,7 @@ Aplikasi web untuk mengelola live streaming video ke berbagai platform (Facebook
 
 1. Clone repository:
 ```bash
-git clone https://github.com/username/live-streaming-manager.git
+git clone https://github.com/masdonik/live-simple.git
 cd live-streaming-manager
 ```
 
